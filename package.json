@@ -1,0 +1,36 @@
+{
+  "name": "quantum-wms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-Stack Enterprise & Quantum-Accelerated Warehouse Management System (PostgreSQL 17/18 + PGlite + Supabase)",
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3000",
+    "lint": "next lint",
+    "test": "vitest run",
+    "db:reset": "node scripts/reset-db.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@supabase/supabase-js": "^2.49.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.475.0",
+    "next": "^15.3.0",
+    "pg": "^8.13.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "@types/pg": "^8.11.11",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}
