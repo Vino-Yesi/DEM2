@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { dbQuery, withTransaction, getPersistenceMetadata, getSqlTraces } from '@/lib/db';
 import {
   receivePurchaseOrder,
@@ -414,22 +415,26 @@ export async function runWmsSystemDebugger() {
   // Check 6: Transactional Event Outbox Sync Queue
   {
     const t0 = performance.now();
-    const failedEvents = await dbQuery<{ event_id: string; event_type: string; error_message: string }>(
-      `SELECT event_id, event_type, COALESCE(error_message, 'Pending retry') AS error_message
-       FROM integration.event_outbox
-       WHERE status = 'FAILED'`
+    const outboxStatus = await dbQuery<{ failed_count: number; pending_count: number }>(
+      `SELECT COUNT(*) FILTER (WHERE status = 'FAILED')::int AS failed_count,
+              COUNT(*) FILTER (WHERE status = 'PENDING')::int AS pending_count
+       FROM integration.event_outbox`
     );
+    const failedCount = outboxStatus.rows[0]?.failed_count ?? 0;
+    const pendingCount = outboxStatus.rows[0]?.pending_count ?? 0;
     checks.push({
       code: 'INV-06',
       name: 'Transactional ERP / Webhook Event Outbox',
-      status: failedEvents.rows.length === 0 ? 'PASS' : 'FAIL',
+      status: failedCount > 0 ? 'FAIL' : pendingCount > 0 ? 'WARN' : 'PASS',
       latencyMs: Math.round((performance.now() - t0) * 100) / 100,
       summary:
-        failedEvents.rows.length === 0
-          ? 'All integration outbox events published cleanly with zero failed webhooks.'
-          : `${failedEvents.rows.length} integration event(s) in FAILED state awaiting replay.`,
-      details: failedEvents.rows,
-      canAutoHeal: failedEvents.rows.length > 0,
+        failedCount > 0
+          ? `${failedCount} integration event(s) failed delivery; ${pendingCount} event(s) are queued.`
+          : pendingCount > 0
+            ? `${pendingCount} integration event(s) are queued and awaiting a delivery worker.`
+            : 'No integration events are waiting for delivery.',
+      details: { failedCount, pendingCount },
+      canAutoHeal: failedCount > 0,
     });
   }
 
@@ -452,7 +457,7 @@ export async function injectDiagnosticFault(
 ) {
   switch (faultType) {
     case 'STUCK_OUTBOX_WEBHOOK': {
-      const evId = `EVT-ERR-${Date.now().toString().slice(-4)}`;
+      const evId = `EVT-ERR-${crypto.randomUUID()}`;
       await dbQuery(
         `INSERT INTO integration.event_outbox
           (event_id, aggregate_type, aggregate_id, event_type, payload, status, retry_count, error_message)
@@ -568,12 +573,14 @@ export async function autoHealWmsIssues() {
     // 5. Replay & publish failed outbox events
     const replayed = await tx.query<{ event_id: string }>(
       `UPDATE integration.event_outbox
-       SET status = 'PUBLISHED', retry_count = retry_count + 1, error_message = NULL, processed_at = NOW()
+       SET status = 'PENDING',
+           error_message = 'Re-queued by debugger; awaiting integration delivery worker.',
+           processed_at = NULL
        WHERE status = 'FAILED'
        RETURNING event_id`
     );
     if (replayed.rows.length > 0) {
-      actionsTaken.push(`Replayed & published ${replayed.rows.length} failed ERP outbox webhook(s): ${replayed.rows.map((e) => e.event_id).join(', ')}.`);
+      actionsTaken.push(`Re-queued ${replayed.rows.length} failed ERP event(s) for delivery: ${replayed.rows.map((e) => e.event_id).join(', ')}. A delivery worker must publish them.`);
     }
 
     await tx.query(

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import crypto from 'crypto';
 import { dbQuery, ensureDbInitialized } from '@/lib/db';
 import {
   simulateConcurrentAllocationRace,
@@ -30,6 +31,18 @@ describe('Quantum WMS Enterprise Core & PostgreSQL 18 Integrity Suite', () => {
     await expect(
       dbQuery('DELETE FROM inventory.inventory_ledger WHERE id = 1')
     ).rejects.toThrow(/IMMUTABLE_LEDGER_VIOLATION/);
+  });
+
+  it('defaults new integration outbox events to PENDING until delivery succeeds', async () => {
+    const eventId = `EVT-TEST-${crypto.randomUUID()}`;
+    const inserted = await dbQuery<{ status: string; processed_at: string | null }>(
+      `INSERT INTO integration.event_outbox (event_id, aggregate_type, aggregate_id, event_type, payload)
+       VALUES ($1, 'TEST', 'TEST-1', 'test.created', '{}'::jsonb)
+       RETURNING status, processed_at`,
+      [eventId]
+    );
+
+    expect(inserted.rows[0]).toMatchObject({ status: 'PENDING', processed_at: null });
   });
 
   it('prevents double-allocation under concurrent Promise.all contention (Row-Level Locking)', async () => {
@@ -65,6 +78,13 @@ describe('Quantum WMS Enterprise Core & PostgreSQL 18 Integrity Suite', () => {
     // Receive PO-2026-402 (id=2) which brings in +50 SKU-OPT-SFP!
     const grn = await receivePurchaseOrder({ poId: 2, qcStatus: 'PASSED' });
     expect(grn.grns.length).toBeGreaterThan(0);
+    const inboundEvent = await dbQuery<{ status: string; processed_at: string | null }>(
+      `SELECT status, processed_at FROM integration.event_outbox
+       WHERE event_type = 'inbound.po.received' AND aggregate_id = $1
+       ORDER BY id DESC LIMIT 1`,
+      [grn.poNumber]
+    );
+    expect(inboundEvent.rows[0]).toMatchObject({ status: 'PENDING', processed_at: null });
 
     // Now the order that lost the race earlier can allocate cleanly!
     const pendingRes = await dbQuery<{ id: number }>(
@@ -94,7 +114,7 @@ describe('Quantum WMS Enterprise Core & PostgreSQL 18 Integrity Suite', () => {
     expect(shipped.trackingNumber).toMatch(/AE$/);
   });
 
-  it('detects injected operational faults in Live Debugger and self-heals back to HEALTHY', async () => {
+  it('detects faults, repairs operational state, and re-queues undelivered ERP events', async () => {
     await injectDiagnosticFault('STUCK_OUTBOX_WEBHOOK');
     await injectDiagnosticFault('BLOCKED_PICK_BIN');
     await injectDiagnosticFault('ORPHAN_RESERVATION');
@@ -107,7 +127,8 @@ describe('Quantum WMS Enterprise Core & PostgreSQL 18 Integrity Suite', () => {
     expect(heal.healedCount).toBeGreaterThanOrEqual(2);
 
     const cleanAgain = await runWmsSystemDebugger();
-    expect(cleanAgain.overallHealth).toBe('HEALTHY');
-    expect(cleanAgain.issueCount).toBe(0);
+    expect(cleanAgain.overallHealth).toBe('WARNING');
+    expect(cleanAgain.checks.find((check) => check.code === 'INV-06')?.status).toBe('WARN');
+    expect(cleanAgain.checks.find((check) => check.code === 'INV-06')?.summary).toContain('delivery worker');
   });
 });

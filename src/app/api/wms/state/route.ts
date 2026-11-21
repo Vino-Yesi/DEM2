@@ -276,6 +276,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: any) {
     console.error('WMS state error:', err);
-    return NextResponse.json({ error: err?.message || 'Failed to load WMS state' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load WMS state. Check the server logs for details.' }, { status: 500 });
   }
 }

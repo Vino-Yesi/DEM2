@@ -4,10 +4,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: wms
-      POSTGRES_PASSWORD: wms_local_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: quantum_wms
     ports:
-      - "5432:5432"
+      - "${WMS_BIND_ADDRESS:-127.0.0.1}:5432:5432"
     volumes:
       - pg18_data:/var/lib/postgresql/data
       - ./src/lib/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -23,20 +23,24 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadminpassword
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${WMS_BIND_ADDRESS:-127.0.0.1}:9000:9000"
+      - "${WMS_BIND_ADDRESS:-127.0.0.1}:9001:9001"
     volumes:
       - minio_data:/data
 
   wms-web:
     build: .
     ports:
-      - "3000:3000"
+      - "${WMS_BIND_ADDRESS:-127.0.0.1}:3000:3000"
     environment:
-      DATABASE_URL: postgresql://wms:wms_local_password@postgres:5432/quantum_wms
+      DATABASE_URL: postgresql://wms:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/quantum_wms
+      DATABASE_SSL: disable
+      WMS_AUTH_USER: ${WMS_AUTH_USER:?Set WMS_AUTH_USER in .env}
+      WMS_AUTH_PASSWORD: ${WMS_AUTH_PASSWORD:?Set WMS_AUTH_PASSWORD in .env}
+      WMS_ALLOWED_ORIGINS: ${WMS_ALLOWED_ORIGINS:-}
     depends_on:
       - postgres
       - redis

@@ -450,7 +450,7 @@ CREATE TABLE IF NOT EXISTS integration.event_outbox (
   aggregate_id VARCHAR(64) NOT NULL,
   event_type VARCHAR(64) NOT NULL,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-  status VARCHAR(24) NOT NULL DEFAULT 'PUBLISHED' CHECK (status IN ('PENDING', 'PUBLISHED', 'FAILED')),
+  status VARCHAR(24) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PUBLISHED', 'FAILED')),
   retry_count INTEGER NOT NULL DEFAULT 0,
   error_message TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
