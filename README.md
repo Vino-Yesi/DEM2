@@ -31,6 +31,18 @@ Full-stack Warehouse Management System built on a **12-schema PostgreSQL 18 arch
 4. **Mini AI Advisors & Live Self-Healing System Debugger**:
    - Proactive stockout, FEFO cold-chain expiry, replenishment, and dock bottleneck advisors with 1-click fixes.
    - Live 6-invariant SQL verifier, Chaos/Fault Injector, and 1-click Self-Healing Auto-Repair.
+   - ERP events are written to the transactional outbox as `PENDING`; a delivery worker is not included, so the debugger never reports queued or failed events as published.
+
+## Security & Integrations
+
+- Production deployments and any deployment using `DATABASE_URL` must set `WMS_AUTH_USER` and a unique `WMS_AUTH_PASSWORD` of at least 16 characters. The app uses HTTP Basic authentication for its pages and API, so serve it over HTTPS and provide the same credentials to API clients.
+- Browser integrations are same-origin by default. To allow another browser origin, list its exact `https://...` origin(s) in `WMS_ALLOWED_ORIGINS`, separated by commas; wildcard origins are rejected.
+- Remote PostgreSQL connections verify TLS certificates by default. Set `DATABASE_SSL=disable` only for a trusted local database that does not support TLS; Docker Compose uses this only on its private local database connection.
+- Demo database reset and diagnostic fault injection are disabled in production and for databases selected by `DATABASE_URL`.
+- Apply `supabase/migrations/20261121000100_wms_outbox_delivery_state.sql` to existing databases so new outbox rows default to `PENDING`; fresh local schemas already include this default.
+- This shared Basic-auth gate is not per-user authorization or tenant isolation. Add identity-based roles and database row-level access policies before using the demo as a multi-tenant production WMS.
+- To use Docker Compose, copy `.env.example` to `.env`, set the required database, app-authentication, and MinIO credentials, then run `docker compose up --build`. Ports bind to `127.0.0.1` by default; set `WMS_BIND_ADDRESS` explicitly only when remote access is intended.
+- Use Node.js 22.12+ or 24+ for development and tests. For Docker Compose, keep `POSTGRES_PASSWORD` URL-safe (letters, digits, `.`, `_`, or `-`) because it is included in the local connection URL.
 
 ## Quick Commands
 

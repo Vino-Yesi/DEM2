@@ -423,9 +423,9 @@ export async function receivePurchaseOrder(input: {
     );
 
     await tx.query(
-      `INSERT INTO integration.event_outbox (event_id, aggregate_type, aggregate_id, event_type, payload, status, processed_at)
-       VALUES ($1, 'PURCHASE_ORDER', $2, 'inbound.po.received', $3::jsonb, 'PUBLISHED', NOW())`,
-      [`EVT-${Date.now().toString().slice(-6)}`, po.po_number, JSON.stringify({ grns, qcStatus: input.qcStatus })]
+      `INSERT INTO integration.event_outbox (event_id, aggregate_type, aggregate_id, event_type, payload, status)
+       VALUES ($1, 'PURCHASE_ORDER', $2, 'inbound.po.received', $3::jsonb, 'PENDING')`,
+      [`EVT-${crypto.randomUUID()}`, po.po_number, JSON.stringify({ grns, qcStatus: input.qcStatus })]
     );
 
     return { poNumber: po.po_number, grns, putawayLocationId: targetLocId, qcStatus: input.qcStatus };
@@ -1205,10 +1205,10 @@ export async function dispatchSalesOrder(soId: number, carrierId = 1, serviceLev
     await tx.query(`UPDATE outbound.sales_orders SET status = 'DISPATCHED', updated_at = NOW() WHERE id = $1`, [so.id]);
 
     await tx.query(
-      `INSERT INTO integration.event_outbox (event_id, aggregate_type, aggregate_id, event_type, payload, status, processed_at)
-       VALUES ($1, 'SHIPMENT', $2, 'transport.shipment.dispatched', $3::jsonb, 'PUBLISHED', NOW())`,
+      `INSERT INTO integration.event_outbox (event_id, aggregate_type, aggregate_id, event_type, payload, status)
+       VALUES ($1, 'SHIPMENT', $2, 'transport.shipment.dispatched', $3::jsonb, 'PENDING')`,
       [
-        `EVT-${Date.now().toString().slice(-6)}`,
+        `EVT-${crypto.randomUUID()}`,
         shipmentNumber,
         JSON.stringify({ soNumber: so.so_number, trackingNumber, carrierId }),
       ]

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resetDemoDatabase } from '@/lib/db';
+import { getPersistenceMode, resetDemoDatabase } from '@/lib/db';
 import {
   scanBarcodeOrCode,
   createSkuMaster,
@@ -104,6 +104,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, snapshot });
       }
       case 'RESET_DEMO_DB': {
+        if (process.env.NODE_ENV === 'production' || getPersistenceMode() === 'DEPLOY') {
+          return NextResponse.json({ error: 'Demo database reset is disabled in production.' }, { status: 403 });
+        }
         await resetDemoDatabase();
         return NextResponse.json({ ok: true, message: 'Database reset to fresh seeded demo state.' });
       }
@@ -111,6 +114,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
     }
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Operation failed' }, { status: 400 });
+    console.error('WMS action failed:', err);
+    return NextResponse.json({ error: 'Operation failed. Check the server logs for details.' }, { status: 400 });
   }
 }

@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unsupported quantum mode: ${mode}` }, { status: 400 });
     }
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Quantum computation error' }, { status: 400 });
+    console.error('WMS quantum operation failed:', err);
+    return NextResponse.json({ error: 'Quantum operation failed. Check the server logs for details.' }, { status: 400 });
   }
 }

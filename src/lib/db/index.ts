@@ -113,10 +113,16 @@ async function getRawDriver(): Promise<{ mode: PersistenceMode; pglite?: PGlite;
   if (mode === 'DEPLOY') {
     if (!state.pgPool) {
       const conn = process.env.DATABASE_URL!;
-      const isLocal = conn.includes('localhost') || conn.includes('127.0.0.1');
+      const sslMode = process.env.DATABASE_SSL?.trim().toLowerCase();
+      if (sslMode && !['disable', 'require'].includes(sslMode)) {
+        throw new Error('DATABASE_SSL must be set to "require" or "disable".');
+      }
+      const host = new URL(conn).hostname;
+      const isLocal = ['localhost', '127.0.0.1', '::1', 'postgres'].includes(host);
+      const useSsl = sslMode ? sslMode === 'require' : !isLocal;
       state.pgPool = new Pool({
         connectionString: conn,
-        ssl: isLocal ? false : { rejectUnauthorized: false },
+        ssl: useSsl ? { rejectUnauthorized: true } : false,
         max: 12,
       });
     }
@@ -359,6 +365,10 @@ export async function withTransaction<R>(fn: (tx: TxClient) => Promise<R>): Prom
 }
 
 export async function resetDemoDatabase(): Promise<void> {
+  if (process.env.NODE_ENV === 'production' || getPersistenceMode() === 'DEPLOY') {
+    throw new Error('Demo database reset is disabled in production.');
+  }
+
   await ensureDbInitialized();
   const { pglite, pool } = await getRawDriver();
   const dropSql = `

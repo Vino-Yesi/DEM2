@@ -7,6 +7,7 @@ import {
   injectDiagnosticFault,
   autoHealWmsIssues,
 } from '@/lib/ai/advisor-debugger';
+import { getPersistenceMode } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,8 @@ export async function GET(req: NextRequest) {
     const [debugReport, insights] = await Promise.all([runWmsSystemDebugger(), runMiniAiAdvisors(wh)]);
     return NextResponse.json({ debugReport, insights });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Debugger check failed' }, { status: 500 });
+    console.error('WMS debugger check failed:', err);
+    return NextResponse.json({ error: 'Debugger check failed. Check the server logs for details.' }, { status: 500 });
   }
 }
 
@@ -34,6 +36,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, result });
       }
       case 'INJECT_FAULT': {
+        if (process.env.NODE_ENV === 'production' || getPersistenceMode() === 'DEPLOY') {
+          return NextResponse.json({ error: 'Fault injection is disabled in production.' }, { status: 403 });
+        }
         const result = await injectDiagnosticFault(payload.faultType);
         const debugReport = await runWmsSystemDebugger();
         return NextResponse.json({ ok: true, result, debugReport });
@@ -47,6 +52,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unknown debugger action: ${action}` }, { status: 400 });
     }
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Debugger action failed' }, { status: 400 });
+    console.error('WMS debugger action failed:', err);
+    return NextResponse.json({ error: 'Debugger action failed. Check the server logs for details.' }, { status: 400 });
   }
 }
